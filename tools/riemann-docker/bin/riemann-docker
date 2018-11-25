@@ -113,23 +113,38 @@ class Riemann::Tools::DockerHealth
 
 
   def cpu(id, name, stats)
+    num_cpus = stats['cpu_stats']['cpu_usage']['percpu_usage'].count
+    last = stats['precpu_stats']['cpu_usage']['total_usage']
+    current = stats['cpu_stats']['cpu_usage']['total_usage']
+    last_time = Time.parse(stats['preread']);
+    current_time = Time.parse(stats['read']);
 
-    current = stats['precpu_stats']['cpu_usage']['total_usage'] / stats['precpu_stats']['cpu_usage']['percpu_usage'].count
+    unless last
+      alert name, :cpu, :unknown, nil, 'no total usage found in docker remote api stats'
+      return false
+    end
 
     unless current
       alert name, :cpu, :unknown, nil, 'no total usage found in docker remote api stats'
       return false
     end
 
-    current_time = Time.parse(stats['read']);
-    if (@last_cpu_reads[id] != nil)
-      last = @last_cpu_reads[id]
-      used = (current - last[:v]) / (current_time - last[:t]) / @cpu_coefficient
+    # Delta Usage / Delta Time / Cores
+    delta_usage = current - last
+    used_all = delta_usage / (current_time - last_time) / @cpu_coefficient
+    used_pct = used_all / num_cpus
 
-      report_pct name, :cpu, used
+    report_pct name, :cpu, used_pct, "cores #{num_cpus}"
+
+    state = :ok
+    if used_pct > @limits[:cpu][:critical]
+      state = :critical
+    elsif used_pct > @limits[:cpu][:warning]
+      state = :warning
     end
 
-    @last_cpu_reads[id] = { v: current, t: current_time }
+    alert name, "cpu cores usage", state, used_all, "#{sprintf("%.2f", used_pct * 100)}% cores #{num_cpus}"
+    alert name, "cpu cores total", :ok, num_cpus, ""
   end
 
   def memory(id, name, stats)
