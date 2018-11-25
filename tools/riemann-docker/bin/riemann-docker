@@ -19,7 +19,7 @@ class Riemann::Tools::DockerHealth
   opt :memory_warning, "Memory warning threshold (fraction of RAM)", :default => 0.85
   opt :memory_critical, "Memory critical threshold (fraction of RAM)", :default => 0.95
   opt :host_hostname, "Suffix of host", :type => String, :default => nil
-  opt :checks, "A list of checks to run.", :type => :strings, :default => ['cpu', 'memory', 'disk', 'basic']
+  opt :check, "Add a check to run (can be declared multiple times)", :type => String, :multi => true, :short => "-c"
 
   def get_containers
     Docker::Container.all
@@ -30,7 +30,6 @@ class Riemann::Tools::DockerHealth
   end
 
   def initialize
-
     if (opts[:docker_host] != nil)
       Docker.url = opts[:docker_host]
     end
@@ -51,10 +50,21 @@ class Riemann::Tools::DockerHealth
     @last_cpu_reads = Hash.new
     @last_uptime_reads = Hash.new
 
-    opts[:checks].each do |check|
+    # Default checks
+    if opts[:check].count == 0
+        @disk_enabled = true
+        @cpu_enabled = true
+        @memory_enabled = true
+        @network_enabled = true
+        @basic_inspection_enabled = true
+    end
+
+    opts[:check].each do |check|
       case check
       when 'disk'
         @disk_enabled = true
+      when 'network'
+        @network_enabled = true
       when 'cpu'
         @cpu_enabled = true
       when 'memory'
@@ -63,6 +73,8 @@ class Riemann::Tools::DockerHealth
         @basic_inspection_enabled = true
       end
     end
+
+    puts "Starting checks for basic=#{@basic_inspection_enabled} cpu=#{@cpu_enabled} memory=#{@memory_enabled} network=#{@network_enabled} disk=#{@disk_enabled}"
   end
 
   def alert(container, service, state, metric, description)
