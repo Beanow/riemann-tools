@@ -82,7 +82,8 @@ class Riemann::Tools::DockerHealth
     opts = {  :service => service.to_s,
               :state => state.to_s,
               :metric => metric.to_f,
-              :description => description }
+              :description => description,
+              :tags => ["docker", "container"] }
 
     if (container != nil)
       opts[:host] = "#{@hostname}-#{container}"
