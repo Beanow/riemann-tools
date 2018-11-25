@@ -165,6 +165,45 @@ class Riemann::Tools::DockerHealth
     alert name, 'memory limit', :ok, limit, ''
   end
 
+  def network(id, name, stats)
+    keys_ok = [
+      'rx_bytes', 'rx_packets',
+      'tx_bytes', 'tx_packets'
+    ]
+    keys_warn = [
+      'rx_errors', 'rx_dropped',
+      'tx_errors', 'tx_dropped'
+    ]
+    network = nil
+
+    # The client only gave us one network.
+    if stats['network'] != nil
+      network = stats['network']
+    end
+
+    if network != nil
+      keys_ok.each do |k|
+        val = network[k]
+        alert name, "network #{k.gsub('_', ' ')}", :ok, val, ''
+      end
+      keys_warn.each do |k|
+        val = network[k]
+        state = :ok
+        if val > 0
+          state = :warning
+        end
+        alert name, "network #{k.gsub('_', ' ')}", state, val, ''
+      end
+    else
+      keys_ok.each do |k|
+        alert name, "network #{k.gsub('_', ' ')}", :unknown, nil, 'no network usage found in docker remote api stats'
+      end
+      keys_warn.each do |k|
+        alert name, "network #{k.gsub('_', ' ')}", :unknown, nil, 'no network usage found in docker remote api stats'
+      end
+    end
+  end
+
   def disk
     `df -P`.split(/\n/).each do |r|
       f = r.split(/\s+/)
@@ -209,7 +248,6 @@ class Riemann::Tools::DockerHealth
   end
 
   def tick
-
     # Disk is the same in every container
     if @disk_enabled
       disk()
@@ -229,13 +267,16 @@ class Riemann::Tools::DockerHealth
 
         if @basic_inspection_enabled
           inspection = Docker::Util.parse_json(container.connection.get("/containers/#{id}/json"))
-           basic_inspection(id, name, inspection)
-          end
-          if @cpu_enabled
-            cpu(id, name, stats)
+          basic_inspection(id, name, inspection)
+        end
+        if @cpu_enabled
+          cpu(id, name, stats)
         end
         if @memory_enabled
           memory(id, name, stats)
+        end
+        if @network_enabled
+          network(id, name, stats)
         end
       end
     end
