@@ -122,10 +122,19 @@ class Riemann::Tools::DockerHealth
   def memory(id, name, stats)
     memory_stats = stats['memory_stats']
     usage = memory_stats['usage'].to_f
-    total = memory_stats['limit'].to_f
-    fraction = (usage / total)
+    limit = memory_stats['limit'].to_f
+    fraction = (usage / limit)
 
-    report_pct name, :memory, fraction, "#{usage} / #{total}"
+    state = :ok
+    if fraction > @limits[:memory][:critical]
+      state = :critical
+    elsif fraction > @limits[:memory][:warning]
+      state = :warning
+    end
+
+    report_pct name, :memory, fraction, "#{usage} / #{limit}"
+    alert name, 'memory usage', state, usage, ''
+    alert name, 'memory limit', :ok, limit, ''
   end
 
   def disk
